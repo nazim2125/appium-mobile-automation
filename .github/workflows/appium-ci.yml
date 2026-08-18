@@ -168,6 +168,16 @@ jobs:
             curl -s http://127.0.0.1:4723/status || true
 
             echo "========================================"
+            echo "UI BEFORE TEST"
+            echo "========================================"
+
+            adb shell uiautomator dump /sdcard/window.xml || true
+
+            adb pull /sdcard/window.xml diagnostics/window-before-test.xml || true
+
+            adb exec-out screencap -p > screenshots/before-test.png || true
+
+            echo "========================================"
             echo "RUNNING MAVEN TESTS"
             echo "========================================"
 

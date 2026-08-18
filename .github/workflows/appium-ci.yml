@@ -15,13 +15,13 @@ jobs:
 
     steps:
       # ---------------------------------------------------------
-      # 1. Checkout source code
+      # 1. Checkout
       # ---------------------------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
       # ---------------------------------------------------------
-      # 2. Java 17
+      # 2. Java
       # ---------------------------------------------------------
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -39,7 +39,7 @@ jobs:
           node-version: '20'
 
       # ---------------------------------------------------------
-      # 4. Install Appium 2 + UiAutomator2
+      # 4. Appium
       # ---------------------------------------------------------
       - name: Install Appium 2
         run: |
@@ -52,7 +52,7 @@ jobs:
           appium driver list --installed
 
       # ---------------------------------------------------------
-      # 5. Download demo APK
+      # 5. Download APK
       # ---------------------------------------------------------
       - name: Download My Demo App APK
         run: |
@@ -66,18 +66,13 @@ jobs:
           ls -lh apps/mda.apk
           file apps/mda.apk
 
-          echo "=== APK validation ==="
+          echo "=== Validating APK ==="
           unzip -t apps/mda.apk > /dev/null
 
-          if [ $? -ne 0 ]; then
-            echo "APK validation failed"
-            exit 1
-          fi
-
-          echo "APK downloaded successfully."
+          echo "APK validation successful."
 
       # ---------------------------------------------------------
-      # 6. Enable KVM acceleration
+      # 6. Enable KVM
       # ---------------------------------------------------------
       - name: Enable KVM
         run: |
@@ -91,7 +86,7 @@ jobs:
           ls -la /dev/kvm || true
 
       # ---------------------------------------------------------
-      # 7. Start Android emulator
+      # 7. Android Emulator + Appium + Tests
       # ---------------------------------------------------------
       - name: Run Android emulator + Appium + smoke tests
         uses: reactivecircus/android-emulator-runner@v2
@@ -100,7 +95,7 @@ jobs:
           arch: x86_64
           target: default
           profile: pixel_6
-          force-avd-creation: false
+          force-avd-creation: true
 
           emulator-options: >
             -no-window
@@ -108,32 +103,38 @@ jobs:
             -noaudio
             -no-boot-anim
             -camera-back none
+            -no-snapshot
+            -wipe-data
 
           disable-animations: true
 
           script: |
+            set -u
 
             # -------------------------------------------------
-            # Create diagnostic directories
+            # Create directories
             # -------------------------------------------------
             mkdir -p logs
             mkdir -p screenshots
             mkdir -p diagnostics
 
             # -------------------------------------------------
-            # Android device information
+            # Android device
             # -------------------------------------------------
             echo "========================================"
             echo "ANDROID DEVICE"
             echo "========================================"
 
-            adb devices
+            adb devices -l
 
-            adb shell getprop ro.build.version.release \
-              | tee diagnostics/android-version.txt
+            adb shell getprop ro.build.version.release > diagnostics/android-version.txt || true
+            adb shell getprop ro.product.model > diagnostics/device-model.txt || true
 
-            adb shell getprop ro.product.model \
-              | tee diagnostics/device-model.txt
+            echo "Android version:"
+            cat diagnostics/android-version.txt || true
+
+            echo "Device model:"
+            cat diagnostics/device-model.txt || true
 
             # -------------------------------------------------
             # Start Appium
@@ -151,26 +152,28 @@ jobs:
 
             echo "Appium PID: $APPIUM_PID"
 
-            # Give Appium time to start
             sleep 8
 
             # -------------------------------------------------
-            # Verify Appium is running
+            # Verify Appium
             # -------------------------------------------------
             echo "========================================"
-            echo "APPIUM PROCESS"
+            echo "APPIUM STATUS"
             echo "========================================"
 
-            ps aux | grep appium || true
+            if ! kill -0 "$APPIUM_PID" 2>/dev/null; then
+              echo "ERROR: Appium process is not running."
+              cat logs/appium.log || true
+              exit 1
+            fi
 
-            echo "========================================"
-            echo "APPIUM LOG"
-            echo "========================================"
+            ps aux | grep '[a]ppium' || true
 
-            tail -50 logs/appium.log || true
+            echo "=== Appium log ==="
+            tail -100 logs/appium.log || true
 
             # -------------------------------------------------
-            # Install APK manually for CI verification
+            # Install APK
             # -------------------------------------------------
             echo "========================================"
             echo "INSTALLING APK"
@@ -178,8 +181,10 @@ jobs:
 
             adb install -r apps/mda.apk
 
+            echo "APK installed successfully."
+
             # -------------------------------------------------
-            # Verify installed packages
+            # Installed packages
             # -------------------------------------------------
             echo "========================================"
             echo "INSTALLED PACKAGES"
@@ -187,10 +192,12 @@ jobs:
 
             adb shell pm list packages \
               | grep -Ei "sauce|mydemo|demo" \
-              | tee diagnostics/installed-packages.txt || true
+              > diagnostics/installed-packages.txt || true
+
+            cat diagnostics/installed-packages.txt || true
 
             # -------------------------------------------------
-            # Current Android activity BEFORE tests
+            # Current activity before tests
             # -------------------------------------------------
             echo "========================================"
             echo "CURRENT ACTIVITY BEFORE TESTS"
@@ -198,7 +205,9 @@ jobs:
 
             adb shell dumpsys window \
               | grep -E "mCurrentFocus|mFocusedApp" \
-              | tee diagnostics/current-activity-before.txt || true
+              > diagnostics/current-activity-before.txt || true
+
+            cat diagnostics/current-activity-before.txt || true
 
             # -------------------------------------------------
             # Run Maven tests
@@ -207,23 +216,33 @@ jobs:
             echo "RUNNING APPIUM TESTS"
             echo "========================================"
 
+            set +e
+
             mvn clean test \
               -Dgroups=smoke \
               -Dplatform=android \
               -Denv=qa \
-              -Dapp=./apps/mda.apk \
+              -Dapp="$(pwd)/apps/mda.apk" \
+              -DdeviceName=emulator-5554 \
+              -DappiumServerUrl=http://127.0.0.1:4723 \
+              -DnoReset=false \
+              -DfullReset=false \
               -DsuiteXmlFile=testng.xml
 
             TEST_EXIT_CODE=$?
 
+            set -e
+
+            echo "Maven exit code: $TEST_EXIT_CODE"
+
             # -------------------------------------------------
-            # Collect diagnostics regardless of test result
+            # Diagnostics
             # -------------------------------------------------
             echo "========================================"
-            echo "COLLECTING ANDROID DIAGNOSTICS"
+            echo "COLLECTING DIAGNOSTICS"
             echo "========================================"
 
-            adb devices \
+            adb devices -l \
               > diagnostics/devices.txt || true
 
             adb shell dumpsys window \
@@ -240,49 +259,43 @@ jobs:
               > diagnostics/current-activity-after.txt || true
 
             # -------------------------------------------------
-            # Dump UI hierarchy
+            # UI hierarchy
             # -------------------------------------------------
             echo "========================================"
             echo "DUMPING UI HIERARCHY"
             echo "========================================"
 
-            adb shell uiautomator dump /sdcard/window.xml \
-              || true
+            adb shell uiautomator dump /sdcard/window.xml || true
 
-            adb pull /sdcard/window.xml \
-              diagnostics/window.xml \
-              || true
+            adb pull /sdcard/window.xml diagnostics/window.xml || true
 
             # -------------------------------------------------
-            # Capture screenshot
+            # Screenshot
             # -------------------------------------------------
             echo "========================================"
             echo "CAPTURING SCREENSHOT"
             echo "========================================"
 
             adb exec-out screencap -p \
-              > screenshots/ci-final-screen.png \
-              || true
+              > screenshots/ci-final-screen.png || true
 
             # -------------------------------------------------
-            # Capture logcat
+            # Android logcat
             # -------------------------------------------------
             echo "========================================"
             echo "CAPTURING LOGCAT"
             echo "========================================"
 
             adb logcat -d \
-              > logs/android-logcat.txt \
-              || true
+              > logs/android-logcat.txt || true
 
             # -------------------------------------------------
-            # Capture Appium log
+            # Appium log
             # -------------------------------------------------
-            cp logs/appium.log diagnostics/appium.log \
-              2>/dev/null || true
+            cp logs/appium.log diagnostics/appium.log 2>/dev/null || true
 
             # -------------------------------------------------
-            # Show important Maven information
+            # Surefire reports
             # -------------------------------------------------
             echo "========================================"
             echo "SUREFIRE RESULTS"
@@ -295,12 +308,12 @@ jobs:
               2>/dev/null || true
 
             # -------------------------------------------------
-            # Return original test exit code
+            # Return Maven result
             # -------------------------------------------------
-            exit $TEST_EXIT_CODE
+            exit "$TEST_EXIT_CODE"
 
       # ---------------------------------------------------------
-      # 8. Upload ExtentReports
+      # 8. Extent Reports
       # ---------------------------------------------------------
       - name: Upload ExtentReports
         if: always()
@@ -311,7 +324,7 @@ jobs:
           if-no-files-found: warn
 
       # ---------------------------------------------------------
-      # 9. Upload screenshots
+      # 9. Screenshots
       # ---------------------------------------------------------
       - name: Upload screenshots
         if: always()
@@ -322,7 +335,7 @@ jobs:
           if-no-files-found: warn
 
       # ---------------------------------------------------------
-      # 10. Upload Android diagnostics
+      # 10. Android diagnostics
       # ---------------------------------------------------------
       - name: Upload Android diagnostics
         if: always()
@@ -333,7 +346,7 @@ jobs:
           if-no-files-found: warn
 
       # ---------------------------------------------------------
-      # 11. Upload Appium / Android logs
+      # 11. Appium / Android logs
       # ---------------------------------------------------------
       - name: Upload automation logs
         if: always()
@@ -344,7 +357,7 @@ jobs:
           if-no-files-found: warn
 
       # ---------------------------------------------------------
-      # 12. Upload Maven test results
+      # 12. Maven test results
       # ---------------------------------------------------------
       - name: Upload Maven test results
         if: always()

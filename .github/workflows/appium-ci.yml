@@ -9,12 +9,23 @@ on:
 
 jobs:
   android-smoke:
+    name: Android Smoke Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
+
+      # ==========================================================
+      # CHECKOUT
+      # ==========================================================
+
       - name: Checkout
         uses: actions/checkout@v4
+
+
+      # ==========================================================
+      # JAVA
+      # ==========================================================
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -23,42 +34,91 @@ jobs:
           java-version: '17'
           cache: maven
 
+
+      # ==========================================================
+      # NODE
+      # ==========================================================
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '20'
+
+
+      # ==========================================================
+      # APPIUM
+      # ==========================================================
 
       - name: Install Appium 2 + UiAutomator2 driver
         run: |
           npm install -g appium
+
+          echo "========================================"
+          echo "APPIUM VERSION"
+          echo "========================================"
+
+          appium --version
+
+          echo "========================================"
+          echo "INSTALL UIAUTOMATOR2"
+          echo "========================================"
+
           appium driver install uiautomator2
+
+          echo "========================================"
+          echo "INSTALLED APPIUM DRIVERS"
+          echo "========================================"
+
+          appium driver list --installed
+
+
+      # ==========================================================
+      # DOWNLOAD APK
+      # ==========================================================
 
       - name: Download My Demo App APK
         run: |
           mkdir -p apps
 
-          curl -fL --retry 3 \
-            -o apps/mda.apk \
-            https://github.com/saucelabs/my-demo-app-android/releases/download/2.2.0/mda-2.2.0-25.apk
+          curl -fL --retry 3 -o apps/mda.apk https://github.com/saucelabs/my-demo-app-android/releases/download/2.2.0/mda-2.2.0-25.apk
 
+          echo "========================================"
+          echo "APK INFORMATION"
+          echo "========================================"
+
+          ls -lh apps/mda.apk
           file apps/mda.apk
 
-          unzip -l apps/mda.apk > /dev/null || {
-            echo "Downloaded file is not a valid APK"
-            exit 1
-          }
+          echo "========================================"
+          echo "VALIDATING APK"
+          echo "========================================"
+
+          unzip -t apps/mda.apk > /dev/null
+
+          echo "APK validation successful."
+
+
+      # ==========================================================
+      # KVM
+      # ==========================================================
 
       - name: Enable KVM
         run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
-            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
 
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # ============================================================
-      # THIS IS WHERE THE BLOCK YOU POSTED GOES
-      # ============================================================
+          echo "========================================"
+          echo "KVM STATUS"
+          echo "========================================"
+
+          ls -la /dev/kvm || true
+
+
+      # ==========================================================
+      # ANDROID EMULATOR + APPIUM + TESTS
+      # ==========================================================
 
       - name: Run Android emulator + Appium + smoke tests
         uses: reactivecircus/android-emulator-runner@v2
@@ -68,21 +128,27 @@ jobs:
           arch: x86_64
           target: default
           profile: pixel_6
+
           force-avd-creation: false
 
-          emulator-options: >
-            -no-window
-            -gpu swiftshader_indirect
-            -noaudio
-            -no-boot-anim
-            -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
 
           disable-animations: true
 
           script: |
+
+            # ======================================================
+            # DIRECTORIES
+            # ======================================================
+
             mkdir -p logs
             mkdir -p screenshots
             mkdir -p diagnostics
+
+
+            # ======================================================
+            # ANDROID DEVICE
+            # ======================================================
 
             echo "========================================"
             echo "ANDROID DEVICE"
@@ -90,8 +156,16 @@ jobs:
 
             adb devices -l
 
+            echo "Android version:"
             adb shell getprop ro.build.version.release
+
+            echo "Device model:"
             adb shell getprop ro.product.model
+
+
+            # ======================================================
+            # INSTALL APK
+            # ======================================================
 
             echo "========================================"
             echo "INSTALL APK DIRECTLY"
@@ -99,41 +173,71 @@ jobs:
 
             adb install -r "$(pwd)/apps/mda.apk"
 
-            echo "APK INSTALL EXIT CODE: $?"
+            APK_EXIT_CODE=$?
+
+            echo "APK INSTALL EXIT CODE: $APK_EXIT_CODE"
+
+            if [ "$APK_EXIT_CODE" -ne 0 ]; then
+              echo "ERROR: APK installation failed."
+              exit "$APK_EXIT_CODE"
+            fi
+
+
+            # ======================================================
+            # VERIFY PACKAGE
+            # ======================================================
 
             echo "========================================"
-            echo "INSTALLED PACKAGE"
+            echo "VERIFY INSTALLED PACKAGE"
             echo "========================================"
 
-            adb shell pm list packages \
-              | grep "com.saucelabs.mydemoapp.android" || true
+            adb shell pm list packages > diagnostics/packages.txt
+
+            grep "com.saucelabs.mydemoapp.android" diagnostics/packages.txt || true
+
+
+            # ======================================================
+            # START APPLICATION DIRECTLY
+            # ======================================================
 
             echo "========================================"
             echo "START APP DIRECTLY"
             echo "========================================"
 
-            adb shell am force-stop \
-              com.saucelabs.mydemoapp.android || true
+            adb shell am force-stop com.saucelabs.mydemoapp.android || true
 
-            adb shell monkey \
-              -p com.saucelabs.mydemoapp.android \
-              1 || true
+            adb shell monkey -p com.saucelabs.mydemoapp.android 1 || true
 
             sleep 10
+
+
+            # ======================================================
+            # CURRENT ACTIVITY
+            # ======================================================
 
             echo "========================================"
             echo "CURRENT ACTIVITY"
             echo "========================================"
 
-            adb shell dumpsys window \
-              | grep -E "mCurrentFocus|mFocusedApp" || true
+            adb shell dumpsys window > diagnostics/window-before-appium.txt || true
+
+            grep -E "mCurrentFocus|mFocusedApp" diagnostics/window-before-appium.txt || true
+
+
+            # ======================================================
+            # APP PROCESS
+            # ======================================================
 
             echo "========================================"
             echo "APP PROCESS"
             echo "========================================"
 
-            adb shell pidof \
-              com.saucelabs.mydemoapp.android || true
+            adb shell pidof com.saucelabs.mydemoapp.android || true
+
+
+            # ======================================================
+            # START APPIUM
+            # ======================================================
 
             echo "========================================"
             echo "START APPIUM"
@@ -143,72 +247,139 @@ jobs:
 
             sleep 8
 
+
+            # ======================================================
+            # APPIUM LOG
+            # ======================================================
+
+            echo "========================================"
+            echo "APPIUM LOG"
+            echo "========================================"
+
+            cat logs/appium.log || true
+
+
+            # ======================================================
+            # APPIUM STATUS
+            # ==========================================================
+
             echo "========================================"
             echo "APPIUM STATUS"
             echo "========================================"
 
-            curl -s \
-              http://127.0.0.1:4723/status || true
+            curl -s http://127.0.0.1:4723/status || true
+
+
+            # ======================================================
+            # RUN MAVEN
+            # ======================================================
 
             echo "========================================"
-            echo "RUN MAVEN"
+            echo "RUN MAVEN TESTS"
             echo "========================================"
 
             set +e
 
-            mvn clean test \
-              -Dgroups=smoke \
-              -Dplatform=android \
-              -Denv=qa \
-              -Dapp="$(pwd)/apps/mda.apk" \
-              -DdeviceName=emulator-5554 \
-              -DappiumServerUrl=http://127.0.0.1:4723 \
-              -DnoReset=false \
-              -DfullReset=false \
-              -DsuiteXmlFile=testng.xml
+            mvn clean test -Dgroups=smoke -Dplatform=android -Denv=qa -Dapp="$(pwd)/apps/mda.apk" -DdeviceName=emulator-5554 -DappiumServerUrl=http://127.0.0.1:4723 -DnoReset=false -DfullReset=false -DsuiteXmlFile=testng.xml
 
             TEST_EXIT_CODE=$?
 
-            echo "Maven exit code: $TEST_EXIT_CODE"
-
             echo "========================================"
-            echo "DIAGNOSTICS"
+            echo "MAVEN EXIT CODE"
             echo "========================================"
 
-            adb devices -l \
-              > diagnostics/devices.txt || true
+            echo "$TEST_EXIT_CODE"
 
-            adb shell dumpsys window \
-              > diagnostics/window.txt || true
 
-            adb shell dumpsys activity \
-              > diagnostics/activity.txt || true
+            # ======================================================
+            # DIAGNOSTICS
+            # ======================================================
 
-            adb shell dumpsys window \
-              | grep -E "mCurrentFocus|mFocusedApp" \
-              > diagnostics/current-activity.txt || true
+            echo "========================================"
+            echo "COLLECTING DIAGNOSTICS"
+            echo "========================================"
 
-            adb shell uiautomator dump \
-              /sdcard/window.xml || true
+            adb devices -l > diagnostics/devices.txt || true
 
-            adb pull \
-              /sdcard/window.xml \
-              diagnostics/window.xml || true
+            adb shell dumpsys window > diagnostics/window.txt || true
 
-            adb exec-out screencap -p \
-              > screenshots/ci-final-screen.png || true
+            adb shell dumpsys activity > diagnostics/activity.txt || true
 
-            adb logcat -d \
-              > logs/android-logcat.txt || true
+            adb shell dumpsys package com.saucelabs.mydemoapp.android > diagnostics/app-package.txt || true
 
-            cp logs/appium.log \
-              diagnostics/appium.log 2>/dev/null || true
+
+            # ======================================================
+            # CURRENT ACTIVITY AFTER TEST
+            # ======================================================
+
+            adb shell dumpsys window > diagnostics/window-after.txt || true
+
+            grep -E "mCurrentFocus|mFocusedApp" diagnostics/window-after.txt || true
+
+
+            # ======================================================
+            # UI HIERARCHY
+            # ======================================================
+
+            echo "========================================"
+            echo "UI HIERARCHY"
+            echo "========================================"
+
+            adb shell uiautomator dump /sdcard/window.xml || true
+
+            adb pull /sdcard/window.xml diagnostics/window.xml || true
+
+
+            # ======================================================
+            # SCREENSHOT
+            # ======================================================
+
+            echo "========================================"
+            echo "SCREENSHOT"
+            echo "========================================"
+
+            adb exec-out screencap -p > screenshots/ci-final-screen.png || true
+
+
+            # ======================================================
+            # ANDROID LOGCAT
+            # ======================================================
+
+            echo "========================================"
+            echo "ANDROID LOGCAT"
+            echo "========================================"
+
+            adb logcat -d > logs/android-logcat.txt || true
+
+
+            # ======================================================
+            # APPIUM LOG COPY
+            # ======================================================
+
+            cp logs/appium.log diagnostics/appium.log 2>/dev/null || true
+
+
+            # ======================================================
+            # SUREFIRE REPORTS
+            # ======================================================
+
+            echo "========================================"
+            echo "SUREFIRE REPORTS"
+            echo "========================================"
+
+            find target/surefire-reports -maxdepth 2 -type f -print 2>/dev/null || true
+
+
+            # ======================================================
+            # RETURN TEST RESULT
+            # ======================================================
 
             exit "$TEST_EXIT_CODE"
 
-      # ============================================================
-      # REPORTS
-      # ============================================================
+
+      # ==========================================================
+      # EXTENT REPORT
+      # ==========================================================
 
       - name: Upload ExtentReports
         if: always()
@@ -216,28 +387,56 @@ jobs:
         with:
           name: extent-report
           path: reports/
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
-      - name: Upload screenshots on failure
-        if: failure()
+
+      # ==========================================================
+      # SCREENSHOTS
+      # ==========================================================
+
+      - name: Upload screenshots
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: failure-screenshots
           path: screenshots/
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
-      - name: Upload diagnostics
+
+      # ==========================================================
+      # ANDROID DIAGNOSTICS
+      # ==========================================================
+
+      - name: Upload Android diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: android-diagnostics
           path: diagnostics/
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
-      - name: Upload logs
+
+      # ==========================================================
+      # AUTOMATION LOGS
+      # ==========================================================
+
+      - name: Upload automation logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: automation-logs
           path: logs/
-          if-no-files-found: ignore
+          if-no-files-found: warn
+
+
+      # ==========================================================
+      # MAVEN TEST RESULTS
+      # ==========================================================
+
+      - name: Upload Maven test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maven-test-results
+          path: target/surefire-reports/
+          if-no-files-found: warn

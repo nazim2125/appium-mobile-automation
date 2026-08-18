@@ -9,13 +9,20 @@ on:
 
 jobs:
   android-smoke:
+    name: Android Smoke Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
+      # ---------------------------------------------------------
+      # 1. Checkout source code
+      # ---------------------------------------------------------
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ---------------------------------------------------------
+      # 2. Java 17
+      # ---------------------------------------------------------
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -23,31 +30,69 @@ jobs:
           java-version: '17'
           cache: maven
 
+      # ---------------------------------------------------------
+      # 3. Node.js
+      # ---------------------------------------------------------
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install Appium 2 + UiAutomator2 driver
+      # ---------------------------------------------------------
+      # 4. Install Appium 2 + UiAutomator2
+      # ---------------------------------------------------------
+      - name: Install Appium 2
         run: |
           npm install -g appium
-          appium driver install uiautomator2
+          appium --version
 
+      - name: Install UiAutomator2 driver
+        run: |
+          appium driver install uiautomator2
+          appium driver list --installed
+
+      # ---------------------------------------------------------
+      # 5. Download demo APK
+      # ---------------------------------------------------------
       - name: Download My Demo App APK
         run: |
           mkdir -p apps
-          curl -fL --retry 3 -o apps/mda.apk \
+
+          curl -fL --retry 3 \
+            -o apps/mda.apk \
             https://github.com/saucelabs/my-demo-app-android/releases/download/2.2.0/mda-2.2.0-25.apk
 
+          echo "=== APK information ==="
+          ls -lh apps/mda.apk
           file apps/mda.apk
-          unzip -l apps/mda.apk > /dev/null || { echo "Downloaded file is not a valid APK"; exit 1; }
 
-      - name: Enable KVM (Android emulator acceleration)
+          echo "=== APK validation ==="
+          unzip -t apps/mda.apk > /dev/null
+
+          if [ $? -ne 0 ]; then
+            echo "APK validation failed"
+            exit 1
+          fi
+
+          echo "APK downloaded successfully."
+
+      # ---------------------------------------------------------
+      # 6. Enable KVM acceleration
+      # ---------------------------------------------------------
+      - name: Enable KVM
         run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+          echo "=== KVM ==="
+          ls -la /dev/kvm || true
+
+      # ---------------------------------------------------------
+      # 7. Start Android emulator
+      # ---------------------------------------------------------
       - name: Run Android emulator + Appium + smoke tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -56,30 +101,255 @@ jobs:
           target: default
           profile: pixel_6
           force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          disable-animations: true
-          script: |
-            appium --log-timestamp &
-            sleep 5
-            mvn clean test -Dgroups=smoke -Dplatform=android -Denv=qa -Dapp=./apps/mda.apk -DsuiteXmlFile=testng.xml
 
+          emulator-options: >
+            -no-window
+            -gpu swiftshader_indirect
+            -noaudio
+            -no-boot-anim
+            -camera-back none
+
+          disable-animations: true
+
+          script: |
+
+            # -------------------------------------------------
+            # Create diagnostic directories
+            # -------------------------------------------------
+            mkdir -p logs
+            mkdir -p screenshots
+            mkdir -p diagnostics
+
+            # -------------------------------------------------
+            # Android device information
+            # -------------------------------------------------
+            echo "========================================"
+            echo "ANDROID DEVICE"
+            echo "========================================"
+
+            adb devices
+
+            adb shell getprop ro.build.version.release \
+              | tee diagnostics/android-version.txt
+
+            adb shell getprop ro.product.model \
+              | tee diagnostics/device-model.txt
+
+            # -------------------------------------------------
+            # Start Appium
+            # -------------------------------------------------
+            echo "========================================"
+            echo "STARTING APPIUM"
+            echo "========================================"
+
+            appium \
+              --log-timestamp \
+              --log-level info \
+              > logs/appium.log 2>&1 &
+
+            APPIUM_PID=$!
+
+            echo "Appium PID: $APPIUM_PID"
+
+            # Give Appium time to start
+            sleep 8
+
+            # -------------------------------------------------
+            # Verify Appium is running
+            # -------------------------------------------------
+            echo "========================================"
+            echo "APPIUM PROCESS"
+            echo "========================================"
+
+            ps aux | grep appium || true
+
+            echo "========================================"
+            echo "APPIUM LOG"
+            echo "========================================"
+
+            tail -50 logs/appium.log || true
+
+            # -------------------------------------------------
+            # Install APK manually for CI verification
+            # -------------------------------------------------
+            echo "========================================"
+            echo "INSTALLING APK"
+            echo "========================================"
+
+            adb install -r apps/mda.apk
+
+            # -------------------------------------------------
+            # Verify installed packages
+            # -------------------------------------------------
+            echo "========================================"
+            echo "INSTALLED PACKAGES"
+            echo "========================================"
+
+            adb shell pm list packages \
+              | grep -Ei "sauce|mydemo|demo" \
+              | tee diagnostics/installed-packages.txt || true
+
+            # -------------------------------------------------
+            # Current Android activity BEFORE tests
+            # -------------------------------------------------
+            echo "========================================"
+            echo "CURRENT ACTIVITY BEFORE TESTS"
+            echo "========================================"
+
+            adb shell dumpsys window \
+              | grep -E "mCurrentFocus|mFocusedApp" \
+              | tee diagnostics/current-activity-before.txt || true
+
+            # -------------------------------------------------
+            # Run Maven tests
+            # -------------------------------------------------
+            echo "========================================"
+            echo "RUNNING APPIUM TESTS"
+            echo "========================================"
+
+            mvn clean test \
+              -Dgroups=smoke \
+              -Dplatform=android \
+              -Denv=qa \
+              -Dapp=./apps/mda.apk \
+              -DsuiteXmlFile=testng.xml
+
+            TEST_EXIT_CODE=$?
+
+            # -------------------------------------------------
+            # Collect diagnostics regardless of test result
+            # -------------------------------------------------
+            echo "========================================"
+            echo "COLLECTING ANDROID DIAGNOSTICS"
+            echo "========================================"
+
+            adb devices \
+              > diagnostics/devices.txt || true
+
+            adb shell dumpsys window \
+              > diagnostics/window.txt || true
+
+            adb shell dumpsys activity \
+              > diagnostics/activity.txt || true
+
+            adb shell dumpsys package \
+              > diagnostics/packages.txt || true
+
+            adb shell dumpsys window \
+              | grep -E "mCurrentFocus|mFocusedApp" \
+              > diagnostics/current-activity-after.txt || true
+
+            # -------------------------------------------------
+            # Dump UI hierarchy
+            # -------------------------------------------------
+            echo "========================================"
+            echo "DUMPING UI HIERARCHY"
+            echo "========================================"
+
+            adb shell uiautomator dump /sdcard/window.xml \
+              || true
+
+            adb pull /sdcard/window.xml \
+              diagnostics/window.xml \
+              || true
+
+            # -------------------------------------------------
+            # Capture screenshot
+            # -------------------------------------------------
+            echo "========================================"
+            echo "CAPTURING SCREENSHOT"
+            echo "========================================"
+
+            adb exec-out screencap -p \
+              > screenshots/ci-final-screen.png \
+              || true
+
+            # -------------------------------------------------
+            # Capture logcat
+            # -------------------------------------------------
+            echo "========================================"
+            echo "CAPTURING LOGCAT"
+            echo "========================================"
+
+            adb logcat -d \
+              > logs/android-logcat.txt \
+              || true
+
+            # -------------------------------------------------
+            # Capture Appium log
+            # -------------------------------------------------
+            cp logs/appium.log diagnostics/appium.log \
+              2>/dev/null || true
+
+            # -------------------------------------------------
+            # Show important Maven information
+            # -------------------------------------------------
+            echo "========================================"
+            echo "SUREFIRE RESULTS"
+            echo "========================================"
+
+            find target/surefire-reports \
+              -maxdepth 2 \
+              -type f \
+              -print \
+              2>/dev/null || true
+
+            # -------------------------------------------------
+            # Return original test exit code
+            # -------------------------------------------------
+            exit $TEST_EXIT_CODE
+
+      # ---------------------------------------------------------
+      # 8. Upload ExtentReports
+      # ---------------------------------------------------------
       - name: Upload ExtentReports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: extent-report
           path: reports/
+          if-no-files-found: warn
 
-      - name: Upload screenshots on failure
-        if: failure()
+      # ---------------------------------------------------------
+      # 9. Upload screenshots
+      # ---------------------------------------------------------
+      - name: Upload screenshots
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: failure-screenshots
           path: screenshots/
+          if-no-files-found: warn
 
-      - name: Upload logs
+      # ---------------------------------------------------------
+      # 10. Upload Android diagnostics
+      # ---------------------------------------------------------
+      - name: Upload Android diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-diagnostics
+          path: diagnostics/
+          if-no-files-found: warn
+
+      # ---------------------------------------------------------
+      # 11. Upload Appium / Android logs
+      # ---------------------------------------------------------
+      - name: Upload automation logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: automation-logs
           path: logs/
+          if-no-files-found: warn
+
+      # ---------------------------------------------------------
+      # 12. Upload Maven test results
+      # ---------------------------------------------------------
+      - name: Upload Maven test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maven-test-results
+          path: target/surefire-reports/
+          if-no-files-found: warn

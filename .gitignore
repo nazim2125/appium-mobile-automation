@@ -1,0 +1,34 @@
+# Build output
+target/
+*.class
+
+# Reports / artifacts generated at runtime
+reports/*.html
+reports/*.json
+screenshots/*.png
+logs/*.log
+logs/*.log.gz
+
+# Keep folder structure in git
+!reports/.gitkeep
+!screenshots/.gitkeep
+!logs/.gitkeep
+
+# Local APKs (large binaries — download per README instead)
+apps/*.apk
+apps/*.ipa
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files that might carry local secrets
+.env

@@ -1,0 +1,13 @@
+[
+  { "case": "invalid_username_valid_password", "username": "not_a_real_user@example.com", "password": "10203040", "expectSuccess": false },
+  { "case": "valid_username_invalid_password", "username": "bob@example.com", "password": "wrongpassword", "expectSuccess": false },
+  { "case": "both_invalid", "username": "not_a_real_user@example.com", "password": "wrongpassword", "expectSuccess": false },
+  { "case": "empty_username", "username": "", "password": "10203040", "expectSuccess": false },
+  { "case": "empty_password", "username": "bob@example.com", "password": "", "expectSuccess": false },
+  { "case": "both_empty", "username": "", "password": "", "expectSuccess": false },
+  { "case": "invalid_email_format", "username": "bob-example-com", "password": "10203040", "expectSuccess": false },
+  { "case": "leading_trailing_spaces", "username": "  bob@example.com  ", "password": "10203040", "expectSuccess": false },
+  { "case": "special_characters", "username": "!!!@@@###$$$", "password": "10203040", "expectSuccess": false },
+  { "case": "very_long_username", "username": "a_very_long_username_that_exceeds_any_reasonable_field_length_12345678901234567890@example.com", "password": "10203040", "expectSuccess": false },
+  { "case": "locked_account", "username": "alice@example.com", "password": "10203040", "expectSuccess": false }
+]

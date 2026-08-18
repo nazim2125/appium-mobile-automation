@@ -49,9 +49,9 @@ jobs:
       # 4. INSTALL APPIUM 2 + UIAUTOMATOR2
       # =========================================================
 
-      - name: Install Appium 2 + UiAutomator2 driver
+      - name: Install Appium 3 + UiAutomator2 driver
         run: |
-          npm install -g appium@2
+          npm install -g appium@3
 
           echo "========================================"
           echo "APPIUM VERSION"
@@ -70,8 +70,10 @@ jobs:
           echo "========================================"
 
           appium driver list --installed
-
-
+          echo "========================================"
+          echo "UIAUTOMATOR2 DOCTOR"
+          echo "========================================"
+          appium driver doctor uiautomator2 || true
       # =========================================================
       # 5. DOWNLOAD APK
       # =========================================================

@@ -64,38 +64,95 @@ public final class DriverFactory {
     }
 
     private static AndroidDriver createAndroidDriver() {
-        UiAutomator2Options options = new UiAutomator2Options();
+    UiAutomator2Options options = new UiAutomator2Options();
 
-        options.setDeviceName(ConfigReader.get("deviceName", "emulator-5554"));
-        options.setAutomationName(ConfigReader.get("automationName", "UiAutomator2"));
+    options.setPlatformName("Android");
 
-        String udid = ConfigReader.get("udid");
-        if (udid != null) {
-            options.setUdid(udid); // real device
-        }
+    options.setDeviceName(
+            ConfigReader.get("deviceName", "emulator-5554")
+    );
 
-        String platformVersion = ConfigReader.get("platformVersion");
-        if (platformVersion != null) {
-            options.setPlatformVersion(platformVersion);
-        }
+    options.setAutomationName("UiAutomator2");
 
-        // Either install from a local/CI-built APK path, or attach to an
-        // already-installed app via package + activity.
-        boolean useInstalledApp = ConfigReader.getBoolean("useInstalledApp", false);
-        String appPath = ConfigReader.get("app");
-        if (appPath != null && !useInstalledApp) {
-            options.setApp(appPath);
-        } else {
-            options.setAppPackage(ConfigReader.getRequired("appPackage"));
-            options.setAppActivity(ConfigReader.getRequired("appActivity"));
-        }
+    String udid = ConfigReader.get("udid");
+    if (udid != null && !udid.isBlank()) {
+        options.setUdid(udid);
+    }
 
-        options.setNoReset(ConfigReader.getBoolean("noReset", false));
-        options.setFullReset(ConfigReader.getBoolean("fullReset", false));
-        options.setAutoGrantPermissions(ConfigReader.getBoolean("autoGrantPermissions", true));
-        options.setNewCommandTimeout(Duration.ofSeconds(ConfigReader.getInt("newCommandTimeout", 120)));
+    String platformVersion = ConfigReader.get("platformVersion");
+    if (platformVersion != null && !platformVersion.isBlank()) {
+        options.setPlatformVersion(platformVersion);
+    }
 
-        return new AndroidDriver(buildServerUrl(), options);
+    String appPath = ConfigReader.get("app");
+
+    if (appPath != null && !appPath.isBlank()) {
+
+        options.setApp(appPath);
+
+        /*
+         * Sauce Labs My Demo App
+         */
+        options.setAppPackage(
+                ConfigReader.get(
+                        "appPackage",
+                        "com.saucelabs.mydemoapp.android"
+                )
+        );
+
+        options.setAppWaitActivity(
+                ConfigReader.get(
+                        "appWaitActivity",
+                        "com.saucelabs.mydemoapp.android.view.activities.SplashActivity"
+                )
+        );
+
+    } else {
+
+        options.setAppPackage(
+                ConfigReader.getRequired("appPackage")
+        );
+
+        options.setAppActivity(
+                ConfigReader.getRequired("appActivity")
+        );
+
+        options.setAppWaitActivity(
+                ConfigReader.get(
+                        "appWaitActivity",
+                        ConfigReader.getRequired("appActivity")
+                )
+        );
+    }
+
+    options.setNoReset(
+            ConfigReader.getBoolean("noReset", false)
+    );
+
+    options.setFullReset(
+            ConfigReader.getBoolean("fullReset", false)
+    );
+
+    options.setAutoGrantPermissions(
+            ConfigReader.getBoolean("autoGrantPermissions", true)
+    );
+
+    options.setNewCommandTimeout(
+            Duration.ofSeconds(
+                    ConfigReader.getInt("newCommandTimeout", 120)
+            )
+    );
+
+    /*
+     * Give the application enough time to start on CI.
+     */
+    options.setAppWaitDuration(
+            Duration.ofMillis(
+                    ConfigReader.getInt("appWaitDuration", 30000)
+            )
+    );
+
+    return new AndroidDriver(buildServerUrl(), options);
     }
 
     private static AppiumDriver createIosDriver() {

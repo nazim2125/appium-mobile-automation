@@ -16,13 +16,13 @@ jobs:
     steps:
 
       # =========================================================
-      # 1. Checkout
+      # Checkout
       # =========================================================
       - name: Checkout
         uses: actions/checkout@v4
 
       # =========================================================
-      # 2. Java 17
+      # Java 17
       # =========================================================
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -32,7 +32,7 @@ jobs:
           cache: maven
 
       # =========================================================
-      # 3. Node.js 20
+      # Node.js 20
       # =========================================================
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -40,25 +40,23 @@ jobs:
           node-version: '20'
 
       # =========================================================
-      # 4. Install Appium 2
+      # Appium 2 + UiAutomator2
       # =========================================================
-      - name: Install Appium
+      - name: Install Appium 2 + UiAutomator2 driver
         run: |
           npm install -g appium
+
           echo "Appium version:"
           appium --version
 
-      # =========================================================
-      # 5. Install UiAutomator2
-      # =========================================================
-      - name: Install UiAutomator2 Driver
-        run: |
+          echo "Installing UiAutomator2:"
           appium driver install uiautomator2
-          echo "Installed Appium drivers:"
+
+          echo "Installed drivers:"
           appium driver list --installed
 
       # =========================================================
-      # 6. Download My Demo App APK
+      # Download APK
       # =========================================================
       - name: Download My Demo App APK
         run: |
@@ -68,23 +66,17 @@ jobs:
             -o apps/mda.apk \
             https://github.com/saucelabs/my-demo-app-android/releases/download/2.2.0/mda-2.2.0-25.apk
 
-          echo "========================================"
-          echo "APK INFORMATION"
-          echo "========================================"
-
+          echo "APK information:"
           ls -lh apps/mda.apk
           file apps/mda.apk
 
-          echo "========================================"
-          echo "VALIDATING APK"
-          echo "========================================"
-
+          echo "Validating APK:"
           unzip -t apps/mda.apk > /dev/null
 
           echo "APK validation successful."
 
       # =========================================================
-      # 7. Enable KVM
+      # Enable KVM
       # =========================================================
       - name: Enable KVM
         run: |
@@ -94,14 +86,10 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-          echo "========================================"
-          echo "KVM STATUS"
-          echo "========================================"
-
           ls -la /dev/kvm || true
 
       # =========================================================
-      # 8. Android Emulator + Appium + Tests
+      # Android emulator + Appium + tests
       # =========================================================
       - name: Run Android emulator + Appium + smoke tests
         uses: reactivecircus/android-emulator-runner@v2
@@ -111,33 +99,17 @@ jobs:
           target: default
           profile: pixel_6
 
-          force-avd-creation: true
+          force-avd-creation: false
 
-          emulator-options: >
-            -no-window
-            -gpu swiftshader_indirect
-            -noaudio
-            -no-boot-anim
-            -camera-back none
-            -no-snapshot
-            -wipe-data
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
 
           disable-animations: true
 
           script: |
-            set -u
-
-            # =====================================================
-            # Create directories
-            # =====================================================
 
             mkdir -p logs
             mkdir -p screenshots
             mkdir -p diagnostics
-
-            # =====================================================
-            # Verify Android device
-            # =====================================================
 
             echo "========================================"
             echo "ANDROID DEVICE"
@@ -145,27 +117,24 @@ jobs:
 
             adb devices -l
 
-            adb shell getprop ro.build.version.release \
-              > diagnostics/android-version.txt || true
-
-            adb shell getprop ro.product.model \
-              > diagnostics/device-model.txt || true
-
             echo "Android version:"
-            cat diagnostics/android-version.txt || true
+            adb shell getprop ro.build.version.release || true
 
             echo "Device model:"
-            cat diagnostics/device-model.txt || true
+            adb shell getprop ro.product.model || true
 
             # =====================================================
-            # Start Appium
+            # START APPIUM
+            #
+            # IMPORTANT:
+            # Keep this command on ONE line.
             # =====================================================
 
             echo "========================================"
             echo "STARTING APPIUM"
             echo "========================================"
 
-            appium --log-timestamp --log-level info > logs/appium.log 2>&1 &
+            appium --log-timestamp > logs/appium.log 2>&1 &
 
             APPIUM_PID=$!
 
@@ -177,29 +146,20 @@ jobs:
             # Verify Appium process
             # =====================================================
 
-            echo "========================================"
-            echo "APPIUM STATUS"
-            echo "========================================"
-
             if ! kill -0 "$APPIUM_PID" 2>/dev/null; then
-              echo "ERROR: Appium process failed to start."
-              echo "===== APPIUM LOG ====="
+              echo "ERROR: Appium failed to start."
+              echo "========== APPIUM LOG =========="
               cat logs/appium.log || true
               exit 1
             fi
 
-            ps aux | grep '[a]ppium' || true
-
-            echo "===== APPIUM LOG ====="
-            tail -100 logs/appium.log || true
+            echo "Appium process is running."
 
             # =====================================================
-            # Wait for Appium server
+            # Verify Appium HTTP server
             # =====================================================
 
-            echo "========================================"
-            echo "WAITING FOR APPIUM SERVER"
-            echo "========================================"
+            echo "Waiting for Appium server..."
 
             APPIUM_READY=false
 
@@ -217,59 +177,27 @@ jobs:
             done
 
             if [ "$APPIUM_READY" != "true" ]; then
-              echo "ERROR: Appium server did not become ready."
+              echo "ERROR: Appium server is not responding."
               cat logs/appium.log || true
               exit 1
             fi
 
-            curl -s http://127.0.0.1:4723/status || true
-
             # =====================================================
-            # Install APK
+            # Verify APK exists
             # =====================================================
 
             echo "========================================"
-            echo "INSTALLING APK"
+            echo "APK"
             echo "========================================"
 
-            adb install -r apps/mda.apk
-
-            echo "APK installed successfully."
+            ls -lh apps/mda.apk
 
             # =====================================================
-            # Installed packages
+            # Run tests
             # =====================================================
 
             echo "========================================"
-            echo "INSTALLED PACKAGES"
-            echo "========================================"
-
-            adb shell pm list packages \
-              | grep -Ei "sauce|mydemo|demo" \
-              > diagnostics/installed-packages.txt || true
-
-            cat diagnostics/installed-packages.txt || true
-
-            # =====================================================
-            # Current activity
-            # =====================================================
-
-            echo "========================================"
-            echo "CURRENT ACTIVITY BEFORE TESTS"
-            echo "========================================"
-
-            adb shell dumpsys window \
-              | grep -E "mCurrentFocus|mFocusedApp" \
-              > diagnostics/current-activity-before.txt || true
-
-            cat diagnostics/current-activity-before.txt || true
-
-            # =====================================================
-            # Run Maven tests
-            # =====================================================
-
-            echo "========================================"
-            echo "RUNNING APPIUM TESTS"
+            echo "RUNNING MAVEN TESTS"
             echo "========================================"
 
             set +e
@@ -292,7 +220,7 @@ jobs:
             echo "Maven exit code: $TEST_EXIT_CODE"
 
             # =====================================================
-            # Collect diagnostics
+            # Diagnostics
             # =====================================================
 
             echo "========================================"
@@ -308,20 +236,13 @@ jobs:
             adb shell dumpsys activity \
               > diagnostics/activity.txt || true
 
-            adb shell dumpsys package \
-              > diagnostics/packages.txt || true
-
             adb shell dumpsys window \
               | grep -E "mCurrentFocus|mFocusedApp" \
-              > diagnostics/current-activity-after.txt || true
+              > diagnostics/current-activity.txt || true
 
             # =====================================================
             # UI hierarchy
             # =====================================================
-
-            echo "========================================"
-            echo "DUMPING UI HIERARCHY"
-            echo "========================================"
 
             adb shell uiautomator dump /sdcard/window.xml || true
 
@@ -332,20 +253,12 @@ jobs:
             # Screenshot
             # =====================================================
 
-            echo "========================================"
-            echo "CAPTURING SCREENSHOT"
-            echo "========================================"
-
             adb exec-out screencap -p \
               > screenshots/ci-final-screen.png || true
 
             # =====================================================
             # Android logcat
             # =====================================================
-
-            echo "========================================"
-            echo "CAPTURING ANDROID LOGCAT"
-            echo "========================================"
 
             adb logcat -d \
               > logs/android-logcat.txt || true
@@ -359,29 +272,14 @@ jobs:
               2>/dev/null || true
 
             # =====================================================
-            # Maven results
-            # =====================================================
-
-            echo "========================================"
-            echo "SUREFIRE RESULTS"
-            echo "========================================"
-
-            find target/surefire-reports \
-              -maxdepth 2 \
-              -type f \
-              -print \
-              2>/dev/null || true
-
-            # =====================================================
-            # Return test result
+            # Return Maven result
             # =====================================================
 
             exit "$TEST_EXIT_CODE"
 
       # =========================================================
-      # 9. Upload ExtentReports
+      # ExtentReports
       # =========================================================
-
       - name: Upload ExtentReports
         if: always()
         uses: actions/upload-artifact@v4
@@ -391,9 +289,8 @@ jobs:
           if-no-files-found: warn
 
       # =========================================================
-      # 10. Upload screenshots
+      # Screenshots
       # =========================================================
-
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -403,9 +300,8 @@ jobs:
           if-no-files-found: warn
 
       # =========================================================
-      # 11. Upload diagnostics
+      # Diagnostics
       # =========================================================
-
       - name: Upload Android diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -415,9 +311,8 @@ jobs:
           if-no-files-found: warn
 
       # =========================================================
-      # 12. Upload logs
+      # Logs
       # =========================================================
-
       - name: Upload automation logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -427,9 +322,8 @@ jobs:
           if-no-files-found: warn
 
       # =========================================================
-      # 13. Upload Maven results
+      # Maven reports
       # =========================================================
-
       - name: Upload Maven test results
         if: always()
         uses: actions/upload-artifact@v4

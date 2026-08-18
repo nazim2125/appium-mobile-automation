@@ -8,13 +8,13 @@ import java.util.List;
 
 public class CartPage extends BasePage {
 
-    @AndroidFindBy(accessibility = "Proceed To Checkout button")
+    @AndroidFindBy(xpath = "//*[@text='Proceed To Checkout']")
     private WebElement checkoutButton;
 
-    @AndroidFindBy(accessibility = "Remove")
+    @AndroidFindBy(xpath = "//*[@text='Remove Item']")
     private List<WebElement> removeButtons;
 
-    @AndroidFindBy(xpath = "//*[contains(@resource-id,'cart_item') or contains(@class,'TextView')]")
+    @AndroidFindBy(id = "com.saucelabs.mydemoapp.android:id/titleTV")
     private List<WebElement> cartItems;
 
     public CartPage(AppiumDriver driver) {
@@ -26,11 +26,11 @@ public class CartPage extends BasePage {
     }
 
     public boolean isEmpty() {
-        return removeButtons.isEmpty();
+        return cartItems.isEmpty();
     }
 
     public int getItemCount() {
-        return removeButtons.size();
+        return cartItems.size();
     }
 
     public CheckoutAddressPage proceedToCheckout() {

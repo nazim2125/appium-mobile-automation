@@ -6,10 +6,10 @@ import org.openqa.selenium.WebElement;
 
 public class CheckoutOverviewPage extends BasePage {
 
-    @AndroidFindBy(accessibility = "Place Order button")
+    @AndroidFindBy(xpath = "//*[@text='Place Order']")
     private WebElement placeOrderButton;
 
-    @AndroidFindBy(accessibility = "Total price label")
+    @AndroidFindBy(xpath = "//*[contains(@text,'$')]")
     private WebElement totalPriceLabel;
 
     public CheckoutOverviewPage(AppiumDriver driver) {

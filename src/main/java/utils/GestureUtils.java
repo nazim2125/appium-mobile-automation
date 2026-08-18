@@ -36,6 +36,12 @@ public final class GestureUtils {
         element.click();
     }
 
+    public static void tapAt(AppiumDriver driver, Point point) {
+        PointerInput finger = finger();
+        Sequence tap = buildTapSequence(finger, point, 1);
+        driver.perform(List.of(tap));
+    }
+
     public static void longPress(AppiumDriver driver, WebElement element, Duration holdDuration) {
         Point center = elementCenter(element);
         PointerInput finger = finger();

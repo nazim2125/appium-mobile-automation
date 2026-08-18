@@ -6,13 +6,16 @@ import org.openqa.selenium.WebElement;
 
 public class ProductDetailPage extends BasePage {
 
-    @AndroidFindBy(accessibility = "Add To Cart button")
+    private static final String PACKAGE =
+            "com.saucelabs.mydemoapp.android";
+
+    @AndroidFindBy(id = PACKAGE + ":id/cartBt")
     private WebElement addToCartButton;
 
-    @AndroidFindBy(accessibility = "Product price")
+    @AndroidFindBy(id = PACKAGE + ":id/priceTV")
     private WebElement priceLabel;
 
-    @AndroidFindBy(accessibility = "Cart button")
+    @AndroidFindBy(accessibility = "View cart")
     private WebElement cartButton;
 
     public ProductDetailPage(AppiumDriver driver) {

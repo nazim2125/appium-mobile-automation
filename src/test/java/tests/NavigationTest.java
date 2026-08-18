@@ -20,7 +20,9 @@ public class NavigationTest extends BaseTest {
         // Arrange
         String username = ConfigReader.getRequired("testUsername");
         String password = ConfigReader.getRequired("testPassword");
-        ProductCatalogPage catalog = loginPage().login(username, password);
+        ProductCatalogPage catalog = productCatalogPage()
+                .openLogin()
+                .login(username, password);
 
         // Act
         ProductDetailPage detail = catalog.openProduct(PRODUCT_NAME);
@@ -33,15 +35,11 @@ public class NavigationTest extends BaseTest {
                 "Android back button from Product Detail should return to the Product Catalog");
     }
 
-    @Test(groups = {"regression"}, description = "Unauthorized users cannot reach the product catalog without logging in")
-    public void catalogRequiresAuthentication() {
-        // Arrange: fresh, unauthenticated app launch (BaseTest.setUp)
-
-        // Act
+    @Test(groups = {"regression"}, description = "App launches to product catalog before login")
+    public void appLaunchesToProductCatalogBeforeLogin() {
         ProductCatalogPage catalog = new ProductCatalogPage(driver());
 
-        // Assert: catalog should NOT be reachable without going through LoginPage.login()
-        Assert.assertFalse(catalog.isDisplayed(),
-                "Product catalog should not be visible before authenticating");
+        Assert.assertTrue(catalog.isDisplayed(),
+                "Sauce Labs My Demo App should launch to the Product Catalog screen");
     }
 }

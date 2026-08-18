@@ -6,22 +6,25 @@ import org.openqa.selenium.WebElement;
 
 public class CheckoutAddressPage extends BasePage {
 
-    @AndroidFindBy(accessibility = "Fullname input field")
+    private static final String PACKAGE =
+            "com.saucelabs.mydemoapp.android";
+
+    @AndroidFindBy(id = PACKAGE + ":id/fullNameET")
     private WebElement fullNameField;
 
-    @AndroidFindBy(accessibility = "Address line 1 input field")
+    @AndroidFindBy(id = PACKAGE + ":id/address1ET")
     private WebElement addressLine1Field;
 
-    @AndroidFindBy(accessibility = "City input field")
+    @AndroidFindBy(id = PACKAGE + ":id/cityET")
     private WebElement cityField;
 
-    @AndroidFindBy(accessibility = "State input field")
+    @AndroidFindBy(id = PACKAGE + ":id/stateET")
     private WebElement stateField;
 
-    @AndroidFindBy(accessibility = "Zip code input field")
+    @AndroidFindBy(id = PACKAGE + ":id/zipET")
     private WebElement zipField;
 
-    @AndroidFindBy(accessibility = "Continue button")
+    @AndroidFindBy(xpath = "//*[@text='To Payment']")
     private WebElement continueButton;
 
     public CheckoutAddressPage(AppiumDriver driver) {

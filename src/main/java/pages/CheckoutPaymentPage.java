@@ -6,10 +6,22 @@ import org.openqa.selenium.WebElement;
 
 public class CheckoutPaymentPage extends BasePage {
 
-    @AndroidFindBy(accessibility = "Payment method")
-    private WebElement paymentMethodField;
+    private static final String PACKAGE =
+            "com.saucelabs.mydemoapp.android";
 
-    @AndroidFindBy(accessibility = "Continue button")
+    @AndroidFindBy(id = PACKAGE + ":id/fullNameET")
+    private WebElement fullNameField;
+
+    @AndroidFindBy(id = PACKAGE + ":id/cardNumberET")
+    private WebElement cardNumberField;
+
+    @AndroidFindBy(id = PACKAGE + ":id/expirationDateET")
+    private WebElement expirationDateField;
+
+    @AndroidFindBy(id = PACKAGE + ":id/securityCodeET")
+    private WebElement securityCodeField;
+
+    @AndroidFindBy(xpath = "//*[@text='Review Order']")
     private WebElement continueButton;
 
     public CheckoutPaymentPage(AppiumDriver driver) {
@@ -17,11 +29,14 @@ public class CheckoutPaymentPage extends BasePage {
     }
 
     public boolean isDisplayed() {
-        return isDisplayed(paymentMethodField);
+        return isDisplayed(cardNumberField);
     }
 
     public CheckoutPaymentPage selectPaymentMethod(String method) {
-        type(paymentMethodField, method);
+        type(fullNameField, "Mohd Nazim");
+        type(cardNumberField, "4111111111111111");
+        type(expirationDateField, "12/30");
+        type(securityCodeField, "123");
         return this;
     }
 

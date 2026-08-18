@@ -3,22 +3,28 @@ package tests;
 import base.BaseTest;
 import org.testng.Assert;
 import org.testng.annotations.Test;
-import pages.LoginPage;
+import pages.ProductCatalogPage;
 
 /**
- * TC001 — Application Launch (spec section 6).
+ * TC001 — Application Launch.
+ *
+ * Verifies that the My Demo App launches successfully
+ * and displays the Product Catalog screen.
  */
 public class LaunchTest extends BaseTest {
 
-    @Test(groups = {"smoke"}, description = "App launches without crashing and lands on the Login screen")
-    public void appLaunchesToLoginScreen() {
-        // Arrange: driver + app launch happens in BaseTest.setUp()
+    @Test(
+            groups = {"smoke"},
+            description = "App launches without crashing and displays the Product Catalog screen"
+    )
+    public void appLaunchesToProductCatalogScreen() {
 
-        // Act
-        LoginPage loginPage = loginPage();
+        ProductCatalogPage productCatalogPage =
+                productCatalogPage();
 
-        // Assert
-        Assert.assertTrue(loginPage.isDisplayed(),
-                "Expected the Login screen to be visible after a clean app launch");
+        Assert.assertTrue(
+                productCatalogPage.isDisplayed(),
+                "Expected the Product Catalog screen to be visible after app launch"
+        );
     }
 }

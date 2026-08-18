@@ -26,7 +26,9 @@ public class E2EPurchaseTest extends BaseTest {
         String password = ConfigReader.getRequired("testPassword");
 
         // Act + Assert, one business step at a time
-        ProductCatalogPage catalog = loginPage().login(username, password);
+        ProductCatalogPage catalog = productCatalogPage()
+                .openLogin()
+                .login(username, password);
         Assert.assertTrue(catalog.isDisplayed(), "Login should land on the product catalog");
 
         ProductDetailPage productDetail = catalog.openProduct(PRODUCT_NAME);

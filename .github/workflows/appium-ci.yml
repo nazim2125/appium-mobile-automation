@@ -36,8 +36,11 @@ jobs:
       - name: Download My Demo App APK
         run: |
           mkdir -p apps
-          curl -L -o apps/mda.apk \
-            https://github.com/saucelabs/my-demo-app-android/releases/download/2.2.0/mda-2.2.0.apk
+          curl -fL --retry 3 -o apps/mda.apk \
+            https://github.com/saucelabs/my-demo-app-android/releases/download/2.2.0/mda-2.2.0-25.apk
+
+          file apps/mda.apk
+          unzip -l apps/mda.apk > /dev/null || { echo "Downloaded file is not a valid APK"; exit 1; }
 
       - name: Enable KVM (Android emulator acceleration)
         run: |
